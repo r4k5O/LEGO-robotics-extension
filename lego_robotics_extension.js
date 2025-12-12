@@ -412,9 +412,9 @@
       this.rxCharacteristic = await this.service.getCharacteristic(SPIKE_RX_UUID);
 
       // Aktiviere Benachrichtigungen
-      await this.txCharacteristic.startNotifications();
-      this.txCharacteristic.addEventListener('characteristicvaluechanged',
+      this.rxCharacteristic.addEventListener('characteristicvaluechanged',
         this.handleSpikeNotification.bind(this));
+      await this.rxCharacteristic.startNotifications();
 
       this.connected = true;
       console.log('✓ Verbunden mit', this.hubName);
