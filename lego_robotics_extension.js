@@ -1,12 +1,12 @@
-(function(Scratch) {
+(function (Scratch) {
   'use strict';
 
   const Cast = Scratch.Cast;
 
   // LEGO Spike Prime BLE UUIDs (aus offizieller Dokumentation)
-  const SPIKE_SERVICE_UUID = '00001623-1212-efde-1623-785feabcd123';
-  const SPIKE_TX_UUID = '00001624-1212-efde-1623-785feabcd123';
-  const SPIKE_RX_UUID = '00001625-1212-efde-1623-785feabcd123';
+  const SPIKE_SERVICE_UUID = '0000fd02-0000-1000-8000-00805f9b34fb';
+  const SPIKE_TX_UUID = '0000fd02-0001-1000-8000-00805f9b34fb';
+  const SPIKE_RX_UUID = '0000fd02-0002-1000-8000-00805f9b34fb';
 
   class LEGORobotics {
     constructor() {
@@ -335,24 +335,24 @@
           brakeMenu: {
             acceptReporters: false,
             items: [
-              {text: 'mit Bremse', value: 'brake'},
-              {text: 'auslaufen', value: 'coast'}
+              { text: 'mit Bremse', value: 'brake' },
+              { text: 'auslaufen', value: 'coast' }
             ]
           },
           colorMenu: {
             acceptReporters: true,
-            items: ['schwarz', 'pink', 'violett', 'blau', 'hellblau', 'türkis', 
-                    'grün', 'gelb', 'orange', 'rot', 'weiß']
+            items: ['schwarz', 'pink', 'violett', 'blau', 'hellblau', 'türkis',
+              'grün', 'gelb', 'orange', 'rot', 'weiß']
           }
         }
       };
     }
 
     // ========== VERBINDUNG ==========
-    
+
     async connectDevice(args) {
       const deviceName = Cast.toString(args.DEVICE);
-      
+
       try {
         if (!navigator.bluetooth) {
           alert('Web Bluetooth wird nicht unterstützt. Bitte nutze Chrome, Edge oder Opera.');
@@ -373,10 +373,32 @@
 
     async connectSpike(deviceName) {
       console.log('Suche nach Spike Prime/Essential...');
-      
+
+      const filters = [
+        {
+          services: [SPIKE_SERVICE_UUID],
+          manufacturerData: [
+            {
+              companyIdentifier: 919,
+              dataPrefix: new Uint8Array([1, 0, 0, 0, 0, 0]),
+              mask: new Uint8Array([255, 0, 0, 0, 0, 0])
+            }
+          ]
+        },
+        {
+          services: [SPIKE_SERVICE_UUID],
+          manufacturerData: [
+            {
+              companyIdentifier: 38659,
+              dataPrefix: new Uint8Array([1, 0, 0, 0, 0, 0]),
+              mask: new Uint8Array([255, 0, 0, 0, 0, 0])
+            }
+          ]
+        }
+      ];
+
       this.device = await navigator.bluetooth.requestDevice({
-        filters: [{ namePrefix: 'LEGO Hub' }],
-        optionalServices: [SPIKE_SERVICE_UUID]
+        filters: filters,
       });
 
       this.deviceType = deviceName.includes('Essential') ? 'spike-essential' : 'spike-prime';
@@ -384,21 +406,21 @@
 
       console.log('Verbinde mit:', this.hubName);
       this.server = await this.device.gatt.connect();
-      
+
       this.service = await this.server.getPrimaryService(SPIKE_SERVICE_UUID);
       this.txCharacteristic = await this.service.getCharacteristic(SPIKE_TX_UUID);
       this.rxCharacteristic = await this.service.getCharacteristic(SPIKE_RX_UUID);
 
       // Aktiviere Benachrichtigungen
       await this.txCharacteristic.startNotifications();
-      this.txCharacteristic.addEventListener('characteristicvaluechanged', 
+      this.txCharacteristic.addEventListener('characteristicvaluechanged',
         this.handleSpikeNotification.bind(this));
 
       this.connected = true;
       console.log('✓ Verbunden mit', this.hubName);
-      
+
       // Anfrage Hub-Info senden (JSON-Protokoll falls unterstützt)
-      await this.sendSpikeJSON({m: 'get_hub_info'});
+      await this.sendSpikeJSON({ m: 'get_hub_info' });
 
       // Optional: subscribe to common ports for notifications
       this.subscribeToAllPorts();
@@ -406,7 +428,7 @@
 
     async connectNXT() {
       console.log('Suche nach NXT...');
-      
+
       // Hinweis: NXT verwendet Bluetooth Classic (RFCOMM / SPP). Web Bluetooth (Gatt) unterstützt
       // Bluetooth Classic normalerweise nicht. Wir versuchen trotzdem, ein GATT-Gerät zu verbinden
       // falls ein BLE-Adapter/Bridge vorhanden ist. Andernfalls muss eine Proxy-Lösung (z.B. WebSerial
@@ -419,7 +441,7 @@
 
       this.deviceType = 'nxt';
       this.hubName = this.device.name;
-      
+
       console.log('Verbinde mit:', this.hubName);
       this.server = await this.device.gatt.connect();
 
@@ -527,7 +549,7 @@
       if (!this.isConnected() || !this.deviceType.includes('spike')) return;
       const cmd = {
         m: 'port_command',
-        p: Object.assign({port: port}, params)
+        p: Object.assign({ port: port }, params)
       };
       await this.sendSpikeJSON(cmd);
     }
@@ -535,12 +557,12 @@
     // Abonniere alle Ports sinnvollerweise zum Erhalt von Notifications
     async subscribeToAllPorts() {
       // Spike sendet port_notifications für konfigurierte Ports. Wir versuchen, die üblichen Ports zu abonnieren.
-      const ports = ['A','B','C','D','E','F'];
+      const ports = ['A', 'B', 'C', 'D', 'E', 'F'];
       for (const port of ports) {
         // Bitte beachten: Das eigentliche 'subscribe' ist hardwareabhängig; wir senden eine Anfrage
         // an den Hub, damit dieser Port mit Notifications versehen wird (einige Hubs tun das automatisch).
         try {
-          await this.sendSpikeJSON({m: 'port_subscribe', p: {port: port}});
+          await this.sendSpikeJSON({ m: 'port_subscribe', p: { port: port } });
         } catch (e) {
           // ignore
         }
@@ -619,12 +641,12 @@
 
     async setMotorPower(args) {
       if (!this.isConnected()) return;
-      
+
       const port = Cast.toString(args.PORT).toUpperCase();
       let power = Math.max(-100, Math.min(100, Cast.toNumber(args.POWER)));
 
       if (this.deviceType.includes('spike')) {
-        await this.sendPortCommand(port, {mode: 'pwm', power: power});
+        await this.sendPortCommand(port, { mode: 'pwm', power: power });
       } else if (this.deviceType === 'nxt') {
         await this.nxtSetMotorPower(port, power);
       }
@@ -632,28 +654,28 @@
 
     async runMotorForDegrees(args) {
       if (!this.isConnected()) return;
-      
+
       const port = Cast.toString(args.PORT).toUpperCase();
       const degrees = Cast.toNumber(args.DEGREES);
       let power = Math.max(-100, Math.min(100, Cast.toNumber(args.POWER)));
 
       if (this.deviceType.includes('spike')) {
-        await this.sendPortCommand(port, {mode: 'position', position: degrees, speed: power});
+        await this.sendPortCommand(port, { mode: 'position', position: degrees, speed: power });
       }
     }
 
     async runMotorForSeconds(args) {
       if (!this.isConnected()) return;
-      
+
       const port = Cast.toString(args.PORT).toUpperCase();
       const seconds = Math.max(0, Cast.toNumber(args.SECONDS));
       const power = Math.max(-100, Math.min(100, Cast.toNumber(args.POWER)));
 
-      await this.setMotorPower({PORT: port, POWER: power});
-      
+      await this.setMotorPower({ PORT: port, POWER: power });
+
       return new Promise(resolve => {
         setTimeout(async () => {
-          await this.stopMotor({PORT: port, BRAKE: 'brake'});
+          await this.stopMotor({ PORT: port, BRAKE: 'brake' });
           resolve();
         }, seconds * 1000);
       });
@@ -661,12 +683,12 @@
 
     async stopMotor(args) {
       if (!this.isConnected()) return;
-      
+
       const port = Cast.toString(args.PORT).toUpperCase();
       const brake = Cast.toString(args.BRAKE);
 
       if (this.deviceType.includes('spike')) {
-        await this.sendPortCommand(port, {mode: brake === 'brake' ? 'brake' : 'coast'});
+        await this.sendPortCommand(port, { mode: brake === 'brake' ? 'brake' : 'coast' });
       } else if (this.deviceType === 'nxt') {
         await this.nxtSetMotorPower(port, 0);
       }
@@ -675,9 +697,9 @@
     async stopAllMotors(args) {
       const brake = Cast.toString(args.BRAKE);
       const ports = ['A', 'B', 'C', 'D', 'E', 'F'];
-      
+
       for (const port of ports) {
-        await this.stopMotor({PORT: port, BRAKE: brake});
+        await this.stopMotor({ PORT: port, BRAKE: brake });
       }
     }
 
@@ -688,17 +710,17 @@
 
     async resetMotorPosition(args) {
       if (!this.isConnected() || !this.deviceType.includes('spike')) return;
-      
+
       const port = Cast.toString(args.PORT).toUpperCase();
-      await this.sendPortCommand(port, {mode: 'reset'});
+      await this.sendPortCommand(port, { mode: 'reset' });
     }
 
     // ========== SENSOREN ==========
 
     getColorSensor(args) {
       const port = Cast.toString(args.PORT).toUpperCase();
-      const colors = ['schwarz', 'violett', 'blau', 'türkis', 'grün', 
-                      'gelb', 'rot', 'weiß', 'keine Farbe'];
+      const colors = ['schwarz', 'violett', 'blau', 'türkis', 'grün',
+        'gelb', 'rot', 'weiß', 'keine Farbe'];
       const colorIndex = this.sensorData[port]?.[0] || 0;
       return colors[colorIndex] || 'unbekannt';
     }
@@ -728,36 +750,36 @@
 
     async setHubPixel(args) {
       if (!this.isConnected() || !this.deviceType.includes('spike')) return;
-      
+
       const x = Math.max(0, Math.min(4, Cast.toNumber(args.X)));
       const y = Math.max(0, Math.min(4, Cast.toNumber(args.Y)));
       const brightness = Math.max(0, Math.min(9, Cast.toNumber(args.BRIGHTNESS)));
 
-      await this.sendSpikeJSON({m: 'display_set_pixel', p: {x: x, y: y, brightness: brightness}});
+      await this.sendSpikeJSON({ m: 'display_set_pixel', p: { x: x, y: y, brightness: brightness } });
     }
 
     async setHubLightColor(args) {
       if (!this.isConnected() || !this.deviceType.includes('spike')) return;
-      
+
       const colorMap = {
         'schwarz': 0, 'pink': 1, 'violett': 2, 'blau': 3,
         'hellblau': 4, 'türkis': 5, 'grün': 6, 'gelb': 7,
         'orange': 8, 'rot': 9, 'weiß': 10
       };
-      
+
       const color = Cast.toString(args.COLOR).toLowerCase();
       const colorIndex = colorMap[color] || 0;
 
-      await this.sendSpikeJSON({m: 'hub_led', p: {color: colorIndex}});
+      await this.sendSpikeJSON({ m: 'hub_led', p: { color: colorIndex } });
     }
 
     async playTone(args) {
       if (!this.isConnected() || !this.deviceType.includes('spike')) return;
-      
+
       const note = Cast.toNumber(args.NOTE);
       const duration = Cast.toNumber(args.DURATION);
 
-      await this.sendSpikeJSON({m: 'play_sound', p: {note: note, duration: duration}});
+      await this.sendSpikeJSON({ m: 'play_sound', p: { note: note, duration: duration } });
     }
 
     getHubGesture() {
@@ -799,10 +821,10 @@
 
     async nxtSetMotorPower(port, power) {
       // NXT Direct Command Format
-      const portMap = {'A': 0x00, 'B': 0x01, 'C': 0x02};
+      const portMap = { 'A': 0x00, 'B': 0x01, 'C': 0x02 };
       const portByte = portMap[port] || 0x00;
       const powerByte = ((power & 0xFF) >>> 0);
-      
+
       const command = new Uint8Array([
         0x80, // Command ohne Antwort
         0x04, // SETOUTPUTSTATE
@@ -814,7 +836,7 @@
         0x20, // Run State: Running
         0x00, 0x00, 0x00, 0x00 // Tacho Limit
       ]);
-      
+
       // Senden über (Bridge-)Characteristic falls vorhanden
       await this._sendToNxtCharacteristic(command, true);
       console.log('NXT Command gesendet (versucht):', command);
@@ -822,17 +844,17 @@
 
     async nxtPlaySound(args) {
       if (!this.isConnected() || this.deviceType !== 'nxt') return;
-      
+
       const freq = Cast.toNumber(args.FREQ);
       const ms = Cast.toNumber(args.MS);
-      
+
       const command = new Uint8Array([
         0x80, // Command ohne Antwort
         0x03, // PLAYTONE
         freq & 0xFF, (freq >> 8) & 0xFF,
         ms & 0xFF, (ms >> 8) & 0xFF
       ]);
-      
+
       await this._sendToNxtCharacteristic(command, true);
       console.log('NXT Play Tone gesendet:', freq, 'Hz für', ms, 'ms');
     }
@@ -863,7 +885,7 @@
 
     async nxtGetBattery() {
       if (!this.isConnected() || this.deviceType !== 'nxt') return 0;
-      
+
       // GETBATTERYLEVEL: Command mit Antwort
       const command = new Uint8Array([
         0x00, // Command mit Antwort
