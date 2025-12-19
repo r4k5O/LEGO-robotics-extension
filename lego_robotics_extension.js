@@ -488,6 +488,11 @@
 
     disconnect() {
       if (this.device && this.device.gatt.connected) {
+        if (this.rxCharacteristic) {
+          this.rxCharacteristic.removeEventListener("characteristicvaluechanged", ev => {
+            this.handleNxtNotification(ev);
+          });
+        }
         this.device.gatt.disconnect();
         this.connected = false;
         this.device = null;
@@ -517,7 +522,9 @@
         const jsonMsg = JSON.stringify(obj) + '\r';
         const encoder = new TextEncoder();
         const data = encoder.encode(jsonMsg);
-        await this.rxCharacteristic.writeValue(data);
+        console.log('sendSpikeJSON:data =', jsonMsg);
+        const response = await this.txCharacteristic.writeValueWithResponse(data);
+        console.log('sendSpikeJSON:response', response);
       } catch (error) {
         console.error('Fehler beim Senden JSON:', error);
       }
@@ -530,14 +537,18 @@
       try {
         // Bei manchen Bridges ist ein 2-Byte-Längenpräfix nötig; versuchen wir ohne und mit Präfix.
         try {
-          await this.rxCharacteristic.writeValue(bytes);
+          console.log('sendSpikeRaw:try:bytes', bytes);
+          const response = await this.txCharacteristic.writeValueWithResponse(bytes);
+          console.log('sendSpikeRaw:response', response);
         } catch (e) {
           // fallback mit 2-Byte length prefix (Little Endian)
           const packet = new Uint8Array(2 + bytes.length);
           packet[0] = bytes.length & 0xFF;
           packet[1] = (bytes.length >> 8) & 0xFF;
           packet.set(bytes, 2);
-          await this.rxCharacteristic.writeValue(packet);
+          console.log('sendSpikeRaw:catch:packet', packet);
+          const response = await this.txCharacteristic.writeValueWithResponse(packet);
+          console.log('sendSpikeRaw:response', response);
         }
       } catch (error) {
         console.error('Fehler beim Senden Raw:', error);
